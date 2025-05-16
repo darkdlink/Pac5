@@ -8,7 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable implements MustVerifyEmail
+class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
@@ -21,14 +21,12 @@ class User extends Authenticatable implements MustVerifyEmail
         'name',
         'email',
         'password',
-        'role', // 'admin' (esteticista), 'customer' (cliente)
         'phone',
         'address',
         'city',
         'state',
         'zip_code',
-        'profile_photo',
-        'last_login_at',
+        'role',
     ];
 
     /**
@@ -49,78 +47,53 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
-        'last_login_at' => 'datetime',
     ];
 
-    /**
-     * Get all orders associated with the user.
-     */
+    // Relações
+    public function cart()
+    {
+        return $this->hasOne(Cart::class);
+    }
+
     public function orders()
     {
         return $this->hasMany(Order::class);
     }
 
-    /**
-     * Get all reviews written by the user.
-     */
     public function reviews()
     {
         return $this->hasMany(Review::class);
     }
 
-    /**
-     * Check if user is admin (esteticista).
-     */
+    public function appointments()
+    {
+        return $this->hasMany(Appointment::class);
+    }
+
+    public function wishlistItems()
+    {
+        return $this->hasMany(WishlistItem::class);
+    }
+
+    // Verificar se o usuário é admin
     public function isAdmin()
     {
         return $this->role === 'admin';
     }
 
-    /**
-     * Check if user is customer.
-     */
+    // Verificar se o usuário é cliente
     public function isCustomer()
     {
         return $this->role === 'customer';
     }
 
-    /**
-     * Get the customer's full address.
-     */
-    public function getFullAddressAttribute()
+    // Obter ou criar carrinho para o usuário
+    public function getCart()
     {
-        return "{$this->address}, {$this->city}, {$this->state}, {$this->zip_code}";
-    }
+        if (!$this->cart) {
+            return $this->cart()->create();
+        }
 
-    /**
-     * Get the latest orders for the user.
-     */
-    public function getLatestOrdersAttribute()
-    {
-        return $this->orders()->latest()->take(5)->get();
-    }
-
-    /**
-     * Scope a query to only include customers.
-     */
-    public function scopeCustomers($query)
-    {
-        return $query->where('role', 'customer');
-    }
-
-    /**
-     * Scope a query to only include admins.
-     */
-    public function scopeAdmins($query)
-    {
-        return $query->where('role', 'admin');
-    }
-
-    /**
-     * Scope a query to only include active customers (with at least one order).
-     */
-    public function scopeActive($query)
-    {
-        return $query->whereHas('orders');
+        return $this->cart;
     }
 }

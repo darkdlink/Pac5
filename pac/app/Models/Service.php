@@ -4,187 +4,113 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class Service extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'name',
+        'slug',
         'description',
+        'short_description',
         'price',
-        'sale_price',
-        'duration', // em minutos
+        'duration',
+        'is_featured',
+        'is_active',
         'category_id',
-        'status', // 'active', 'inactive'
-        'featured',
-        'image',
-        'meta_title',
-        'meta_description',
+        'thumbnail',
     ];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
-     */
     protected $casts = [
         'price' => 'decimal:2',
-        'sale_price' => 'decimal:2',
         'duration' => 'integer',
-        'featured' => 'boolean',
+        'is_featured' => 'boolean',
+        'is_active' => 'boolean',
     ];
 
-    /**
-     * The accessors to append to the model's array form.
-     *
-     * @var array
-     */
-    protected $appends = [
-        'current_price',
-        'discount_percentage',
-        'formatted_duration',
-        'average_rating',
-    ];
+    // Cria automaticamente o slug ao criar ou atualizar o nome
+    public static function boot()
+    {
+        parent::boot();
 
-    /**
-     * Get the category that owns the service.
-     */
+        static::creating(function ($service) {
+            if (empty($service->slug)) {
+                $service->slug = Str::slug($service->name);
+            }
+        });
+
+        static::updating(function ($service) {
+            if ($service->isDirty('name') && !$service->isDirty('slug')) {
+                $service->slug = Str::slug($service->name);
+            }
+        });
+    }
+
     public function category()
     {
         return $this->belongsTo(Category::class);
     }
 
-    /**
-     * Get all reviews for the service.
-     */
+    public function images()
+    {
+        return $this->hasMany(ServiceImage::class);
+    }
+
     public function reviews()
     {
         return $this->hasMany(Review::class);
     }
 
-    /**
-     * Get the order items associated with this service.
-     */
+    public function cartItems()
+    {
+        return $this->hasMany(CartItem::class);
+    }
+
     public function orderItems()
     {
         return $this->hasMany(OrderItem::class);
     }
 
-    /**
-     * Get the current price of the service (sale price or regular price).
-     */
-    public function getCurrentPriceAttribute()
+    public function appointments()
     {
-        return $this->sale_price && $this->sale_price < $this->price
-            ? $this->sale_price
-            : $this->price;
+        return $this->hasMany(Appointment::class);
     }
 
-    /**
-     * Get the discount percentage if the service is on sale.
-     */
-    public function getDiscountPercentageAttribute()
+    public function wishlistItems()
     {
-        if (!$this->sale_price || $this->sale_price >= $this->price) {
-            return 0;
-        }
-
-        return round((($this->price - $this->sale_price) / $this->price) * 100);
+        return $this->hasMany(WishlistItem::class);
     }
 
-    /**
-     * Format the duration into hours and minutes.
-     */
-    public function getFormattedDurationAttribute()
+    // Escopo para serviços ativos
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    // Escopo para serviços em destaque
+    public function scopeFeatured($query)
+    {
+        return $query->where('is_featured', true);
+    }
+
+    // Formatar a duração do serviço
+    public function getDurationFormatted()
     {
         $hours = floor($this->duration / 60);
         $minutes = $this->duration % 60;
 
-        $result = '';
+        $formatted = '';
 
         if ($hours > 0) {
-            $result .= $hours . 'h';
+            $formatted .= $hours . 'h';
         }
 
         if ($minutes > 0) {
-            $result .= ($hours > 0 ? ' ' : '') . $minutes . 'min';
+            $formatted .= ($hours > 0 ? ' ' : '') . $minutes . 'min';
         }
 
-        return $result;
-    }
-
-    /**
-     * Get the average rating for this service.
-     */
-    public function getAverageRatingAttribute()
-    {
-        return $this->reviews()->avg('rating') ?? 0;
-    }
-
-    /**
-     * Scope a query to only include active services.
-     */
-    public function scopeActive($query)
-    {
-        return $query->where('status', 'active');
-    }
-
-    /**
-     * Scope a query to only include featured services.
-     */
-    public function scopeFeatured($query)
-    {
-        return $query->where('featured', true);
-    }
-
-    /**
-     * Scope a query to only include services on sale.
-     */
-    public function scopeOnSale($query)
-    {
-        return $query->whereNotNull('sale_price')
-            ->whereRaw('sale_price < price');
-    }
-
-    /**
-     * Scope a query to include services in a price range.
-     */
-    public function scopePriceRange($query, $min, $max)
-    {
-        return $query->where(function ($query) use ($min, $max) {
-            $query->whereBetween('price', [$min, $max])
-                ->orWhereBetween('sale_price', [$min, $max]);
-        });
-    }
-
-    /**
-     * Scope a query to include services in a duration range (in minutes).
-     */
-    public function scopeDurationRange($query, $min, $max)
-    {
-        return $query->whereBetween('duration', [$min, $max]);
-    }
-
-    /**
-     * Get formatted price.
-     */
-    public function getFormattedPriceAttribute()
-    {
-        return 'R$ ' . number_format($this->price, 2, ',', '.');
-    }
-
-    /**
-     * Get formatted sale price.
-     */
-    public function getFormattedSalePriceAttribute()
-    {
-        return $this->sale_price ? 'R$ ' . number_format($this->sale_price, 2, ',', '.') : null;
+        return $formatted;
     }
 }
